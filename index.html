@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disaster Event Visualizer</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <!-- Leaflet Draw CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            background: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        input,
+        select {
+            padding: 0.4rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #location-search {
+            min-width: 200px;
+        }
+
+        #event-description {
+            min-width: 400px;
+            background-color: #f9f9f9;
+            cursor: default;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .search-button {
+            background-color: #27ae60;
+        }
+
+        .search-button:hover {
+            background-color: #229954;
+        }
+
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            z-index: 1;
+        }
+
+        .footer {
+            background: white;
+            padding: 1rem;
+            border-top: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        textarea {
+            width: 100%;
+            height: 80px;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            resize: vertical;
+        }
+
+        #status {
+            font-style: italic;
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="control-group">
+            <label for="location-search">📍 Location:</label>
+            <input type="text" id="location-search" placeholder="Search city, town, or county...">
+            <button class="search-button" onclick="searchLocation()">Search</button>
+        </div>
+
+        <div class="control-group">
+            <label for="date-input">Date:</label>
+            <input type="date" id="date-input">
+        </div>
+
+        <button id="fetch-btn" onclick="fetchData()">Fetch Data</button>
+
+        <!-- New line with filtering controls pinned to left -->
+        <div style="width: 100%; display: flex; gap: 1rem; flex-wrap: wrap;">
+            <div class="control-group">
+                <label for="country-select">Country:</label>
+                <select id="country-select" onchange="filterEvents()">
+                    <option value="">All Countries</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="type-select">Event Type:</label>
+                <select id="type-select" onchange="onEventTypeSelect()">
+                    <option value="">All Types</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="event-description">Description:</label>
+                <input type="text" id="event-description" readonly placeholder="Select event type to see details...">
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="footer">
+        <label for="wkt-input">Polygon WKT (Edit here or on map):</label>
+        <textarea id="wkt-input" oninput="updateMapFromText()" placeholder="WKT Polygon will appear here..."></textarea>
+        <div id="status">Ready</div>
+        <button onclick="updateMapFromText()" style="align-self: flex-end; width: auto;">Update Map from Text</button>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <!-- Leaflet Draw JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <!-- Wicket (WKT Parser) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/wicket/1.3.8/wicket.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/wicket/1.3.8/wicket-leaflet.min.js"></script>
+
+    <script>
+        let globalData = {};
+        let eventTypeMapping = {}; // Maps short type -> list of full event names
+        let map;
+        let drawnItems;
+        let drawControl;
+
+        // Initialize Map
+        function initMap() {
+            map = L.map('map').setView([20, 0], 2); // World view
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // FeatureGroup is to store editable layers
+            drawnItems = new L.FeatureGroup();
+            map.addLayer(drawnItems);
+
+            // Draw Control
+            drawControl = new L.Control.Draw({
+                edit: {
+                    featureGroup: drawnItems
+                },
+                draw: {
+                    polygon: true,
+                    polyline: false,
+                    rectangle: true,
+                    circle: false,
+                    marker: false,
+                    circlemarker: false
+                }
+            });
+            map.addControl(drawControl);
+
+            // Event Listeners for Draw/Edit
+            map.on(L.Draw.Event.CREATED, function (e) {
+                drawnItems.clearLayers(); // Only one polygon at a time for this simplified version
+                const layer = e.layer;
+                drawnItems.addLayer(layer);
+                updateTextFromMap();
+            });
+
+            map.on(L.Draw.Event.EDITED, function (e) {
+                updateTextFromMap();
+            });
+
+            map.on(L.Draw.Event.DELETED, function (e) {
+                updateTextFromMap();
+            });
+        }
+
+        async function fetchData() {
+            const dateInput = document.getElementById('date-input').value;
+            const statusDiv = document.getElementById('status');
+            const countrySelect = document.getElementById('country-select');
+            const typeSelect = document.getElementById('type-select');
+
+            if (!dateInput) {
+                alert("Please enter a date.");
+                return;
+            }
+
+            statusDiv.textContent = "Fetching data...";
+            document.getElementById('fetch-btn').disabled = true;
+            countrySelect.innerHTML = '<option value="">All Countries</option>';
+            typeSelect.innerHTML = '<option value="">All Types</option>';
+            drawnItems.clearLayers();
+            document.getElementById('wkt-input').value = "";
+
+            try {
+                const response = await fetch('/run_script', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: dateInput })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || "Unknown error");
+                }
+
+                // Fetch Results
+                const resultsResponse = await fetch('/results');
+                globalData = await resultsResponse.json();
+
+                populateCountries(dateInput.replace(/-/g, ''));
+                statusDiv.textContent = "Data loaded.";
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.textContent = "Error: " + error.message;
+            } finally {
+                document.getElementById('fetch-btn').disabled = false;
+            }
+        }
+
+        function populateCountries(dateKey) {
+            const countrySelect = document.getElementById('country-select');
+            // globalData structure: { "YYYYMMDD": { "Country": { "EventName": ["WKT"] } } }
+            // Some robustness if dateKey mismatch
+            let dateData = globalData[dateKey];
+            if (!dateData) {
+                // Try finding any key
+                const keys = Object.keys(globalData);
+                if (keys.length > 0) dateData = globalData[keys[0]];
+            }
+
+            if (!dateData) {
+                document.getElementById('status').textContent = "No data found.";
+                return;
+            }
+
+            const countries = Object.keys(dateData).sort();
+
+            countries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country;
+                option.textContent = country;
+                countrySelect.appendChild(option);
+            });
+        }
+
+        function filterEvents() {
+            const countrySelect = document.getElementById('country-select');
+            const typeSelect = document.getElementById('type-select');
+            const selectedCountry = countrySelect.value;
+
+            // Clear events and description
+            typeSelect.innerHTML = '<option value="">All Types</option>';
+            document.getElementById('event-description').value = '';
+            eventTypeMapping = {};
+
+            // Find data for selected country
+            let events = null;
+            for (const date in globalData) {
+                if (globalData[date][selectedCountry]) {
+                    events = globalData[date][selectedCountry];
+                    break;
+                }
+            }
+
+            if (!events) return;
+
+            const eventNames = Object.keys(events);
+            const eventTypes = new Set();
+
+            // Extract short types and build mapping
+            eventNames.forEach(fullName => {
+                const shortType = extractEventType(fullName);
+                eventTypes.add(shortType);
+
+                if (!eventTypeMapping[shortType]) {
+                    eventTypeMapping[shortType] = [];
+                }
+                eventTypeMapping[shortType].push(fullName);
+            });
+
+            // Populate dropdown with unique short types
+            Array.from(eventTypes).sort().forEach(eventType => {
+                const option = document.createElement('option');
+                option.value = eventType;
+                option.textContent = eventType;
+                typeSelect.appendChild(option);
+            });
+        }
+
+        function onEventTypeSelect() {
+            const countrySelect = document.getElementById('country-select');
+            const typeSelect = document.getElementById('type-select');
+            const descriptionField = document.getElementById('event-description');
+            const selectedCountry = countrySelect.value;
+            const selectedType = typeSelect.value;
+
+            if (!selectedCountry || !selectedType) {
+                descriptionField.value = '';
+                return;
+            }
+
+            // Get first full event name for this type
+            const fullEventNames = eventTypeMapping[selectedType];
+            if (!fullEventNames || fullEventNames.length === 0) return;
+
+            const fullEventName = fullEventNames[0]; // Use first match
+
+            // Update description field
+            const description = formatEventDescription(fullEventName);
+            descriptionField.value = description;
+
+            // Find and display polygon
+            let wktList = null;
+            for (const date in globalData) {
+                if (globalData[date][selectedCountry] && globalData[date][selectedCountry][fullEventName]) {
+                    wktList = globalData[date][selectedCountry][fullEventName];
+                    break;
+                }
+            }
+
+            if (wktList && wktList.length > 0) {
+                document.getElementById('wkt-input').value = wktList[0];
+                updateMapFromText();
+            }
+        }
+
+        function updateMapFromText() {
+            const wkt = document.getElementById('wkt-input').value;
+            if (!wkt) return;
+
+            drawnItems.clearLayers();
+
+            try {
+                // Use Wicket to parse WKT
+                const wktObj = new Wkt.Wkt();
+                wktObj.read(wkt);
+
+                const obj = wktObj.toObject(); // Leaflet Layer
+
+                if (Array.isArray(obj)) {
+                    obj.forEach(l => drawnItems.addLayer(l));
+                } else {
+                    drawnItems.addLayer(obj);
+                }
+
+                // Zoom to fit
+                if (drawnItems.getBounds().isValid()) {
+                    map.fitBounds(drawnItems.getBounds());
+                }
+
+                document.getElementById('status').textContent = "Map updated from text.";
+            } catch (e) {
+                // console.error(e); // Silent fail while typing
+                document.getElementById('status').textContent = "Invalid WKT (typing...)";
+            }
+        }
+
+        function updateTextFromMap() {
+            // Convert layers to WKT
+            // If multiple layers, maybe output GeometryCollection or MultiPolygon?
+            // For simplicity, handle the first/main polygon or simple collection.
+
+            const layers = drawnItems.getLayers();
+            if (layers.length === 0) {
+                document.getElementById('wkt-input').value = "";
+                return;
+            }
+
+            try {
+                // Use Wicket to construct WKT
+                // Note: Wicket usually handles one geometry. 
+                // If multiple drawn items, we might need manual handling or assume single polygon editing.
+
+                // Let's grab the first layer for now (usually the connected one)
+                const layer = layers[0];
+                const wktObj = new Wkt.Wkt();
+                wktObj.fromObject(layer);
+                const wkt = wktObj.write();
+
+                document.getElementById('wkt-input').value = wkt;
+                document.getElementById('status').textContent = "WKT updated from map.";
+            } catch (e) {
+                console.error(e);
+                document.getElementById('status').textContent = "Error converting map to WKT.";
+            }
+        }
+
+        // Helper: Extract short event type from full event name
+        function extractEventType(fullEventName) {
+            // Common patterns to extract
+            const patterns = [
+                /^(.*?)(?:\s+in\s+[A-Z])/i,  // "Gale in Iceland" -> "Gale"
+                /^(.*?)(?:,\s+[a-z]+\s+level)/i, // "Heavy rain, yellow level" -> "Heavy rain"
+                /^([^,]+)/  // Everything before first comma
+            ];
+
+            for (const pattern of patterns) {
+                const match = fullEventName.match(pattern);
+                if (match && match[1]) {
+                    let type = match[1].trim();
+                    // Clean up common prefixes
+                    type = type.replace(/^(Southerly|Northerly|Easterly|Westerly)\s+/i, '');
+                    return type;
+                }
+            }
+
+            // Fallback: first 3-4 words
+            const words = fullEventName.split(/\s+/);
+            return words.slice(0, Math.min(3, words.length)).join(' ');
+        }
+
+        // Helper: Format event description with date/time range
+        function formatEventDescription(fullEventName) {
+            // Try to extract ISO date ranges: YYYY-MM-DDTHH:MM:SS
+            const isoDatePattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\+\d{2}:\d{2})?/g;
+            const dates = [];
+            let match;
+
+            while ((match = isoDatePattern.exec(fullEventName)) !== null) {
+                dates.push(match[1]);
+            }
+
+            let dateRange = '';
+            if (dates.length >= 2) {
+                // Format: [start - end]
+                const start = formatDateTime(dates[0]);
+                const end = formatDateTime(dates[1]);
+                dateRange = `[${start} - ${end}]`;
+            } else if (dates.length === 1) {
+                dateRange = `[${formatDateTime(dates[0])}]`;
+            } else {
+                // Try to find DD/MM/YYYY HH:MM format
+                const simpleDate = fullEventName.match(/(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})/);
+                if (simpleDate) {
+                    dateRange = `[${simpleDate[1]}]`;
+                }
+            }
+
+            // Extract description (everything after date info or "in [Country]")
+            let description = fullEventName;
+
+            // Remove ISO dates
+            description = description.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\+\d{2}:\d{2})?/g, '').trim();
+
+            // Clean up multiple commas and spaces
+            description = description.replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
+
+            return dateRange ? `${dateRange}: ${description}` : description;
+        }
+
+        // Helper: Format ISO datetime to DD/MM/YYYY HH:MM
+        function formatDateTime(isoString) {
+            const date = new Date(isoString);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${day}/${month}/${year} ${hours}:${minutes}`;
+        }
+
+        // Location Search
+        async function searchLocation() {
+            const searchInput = document.getElementById('location-search');
+            const query = searchInput.value.trim();
+            const statusDiv = document.getElementById('status');
+
+            if (!query) {
+                alert('Please enter a location to search.');
+                return;
+            }
+
+            statusDiv.textContent = 'Searching for location...';
+
+            try {
+                // Use Nominatim API for geocoding
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+                    {
+                        headers: {
+                            'User-Agent': 'DisasterEventVisualizer/1.0'
+                        }
+                    }
+                );
+
+                const results = await response.json();
+
+                if (results.length === 0) {
+                    statusDiv.textContent = 'Location not found. Try a different search term.';
+                    return;
+                }
+
+                const location = results[0];
+                const lat = parseFloat(location.lat);
+                const lon = parseFloat(location.lon);
+
+                // Determine zoom level based on location type
+                let zoom = 10; // Default for cities
+                const type = location.type;
+
+                if (type === 'country') zoom = 5;
+                else if (type === 'state' || type === 'administrative') zoom = 7;
+                else if (type === 'county') zoom = 9;
+                else if (type === 'city' || type === 'town') zoom = 12;
+                else if (type === 'village' || type === 'suburb') zoom = 14;
+
+                // Focus map on location
+                map.setView([lat, lon], zoom);
+
+                // Add a temporary marker
+                const marker = L.marker([lat, lon]).addTo(map)
+                    .bindPopup(`<b>${location.display_name}</b>`)
+                    .openPopup();
+
+                // Remove marker after 5 seconds
+                setTimeout(() => {
+                    map.removeLayer(marker);
+                }, 5000);
+
+                statusDiv.textContent = `Found: ${location.display_name}`;
+            } catch (error) {
+                console.error('Search error:', error);
+                statusDiv.textContent = 'Error searching location. Please try again.';
+            }
+        }
+
+        // Allow Enter key to trigger search
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('location-search').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    searchLocation();
+                }
+            });
+        });
+
+        // Init
+        initMap();
+    </script>
+</body>
+
+</html>
