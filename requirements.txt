@@ -2,3 +2,4 @@ Flask==3.0.0
 requests==2.31.0
 shapely==2.0.2
 gunicorn==21.2.0
+aiohttp==3.9.1
