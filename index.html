@@ -122,18 +122,69 @@
 
 <body>
     <div class="header">
-        <div class="control-group">
-            <label for="location-search">📍 Location:</label>
-            <input type="text" id="location-search" placeholder="Search city, town, or county...">
-            <button class="search-button" onclick="searchLocation()">Search</button>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <div class="control-group">
+                    <label for="date-input">Date:</label>
+                    <input type="date" id="date-input">
+                </div>
+                <button id="fetch-btn" onclick="fetchData()">Fetch Data</button>
+            </div>
+
+            <div class="control-group">
+                <label for="location-search">📍 Location:</label>
+                <input type="text" id="location-search" placeholder="Search city, town, or county...">
+                <button class="search-button" onclick="searchLocation()">Search</button>
+            </div>
+
+            <div class="control-group">
+                <label for="gemini-key">🔑 Gemini Key:</label>
+                <input type="password" id="gemini-key" placeholder="Enter your Gemini API key..."
+                    style="min-width: 250px;">
+                <button onclick="searchByGemini()">Search by Gemini</button>
+            </div>
         </div>
 
+
+
         <div class="control-group">
-            <label for="date-input">Date:</label>
-            <input type="date" id="date-input">
+            <label for="gemini-prompt">💬 Prompt:</label>
+            <textarea id="gemini-prompt" placeholder="Enter custom prompt or leave default..."
+                style="min-width: 800px; min-height: 75px;">You are a **Global Crisis Intelligence Analyst**. Your task is to scan world news media to identify currently active, high-impact crisis events on {date}.
+
+**1. Definition of "Crisis Event" (Search Criteria):**
+You are looking for **acute, unfolding events** that pose an immediate threat to life, safety, or stability.
+* **✅ Include:**
+    * **Natural Disasters:** Earthquakes (>6.0), Tsunami warnings, Major Hurricanes/Typhoons, Volcanic eruptions.
+    * **Geopolitical Conflict:** Outbreak of war, major military escalations, coups d'état, terrorist attacks with mass casualties.
+    * **Humanitarian:** Massive refugee displacements, sudden famine declarations.
+    * **Health:** New WHO outbreak declarations (e.g., Ebola, Pandemic alerts).
+    * **Major Accidents:** Plane crashes, nuclear incidents, massive infrastructure collapse.
+* **❌ Exclude:**
+    * Op-eds, political opinions, or minor legislative disputes.
+    * Localized crime reports (unless related to large-scale unrest).
+    * Stock market fluctuations (unless it is a total market crash).
+
+**2. Search Instructions:**
+* **Timeframe:** Focus on events occurring or developing within the **last 24-48 hours**.
+* **Sources:** Prioritize Tier-1 Global News Agencies (e.g., Reuters, AP, BBC, Al Jazeera, CNN, AFP).
+* **Verification:** An event must be reported by **at least two independent** major sources to be included.
+
+**3. Output Format:**
+Return the results as in following example. If coordinates not represented, build POLYGON by approximate area coordinates:
+
+{{
+    "{date_compact}": {{
+        "Country Name": {{
+            "Event Description": [
+                "POLYGON ((...))"
+            ]
+        }}
+    }}
+}}</textarea>
         </div>
 
-        <button id="fetch-btn" onclick="fetchData()">Fetch Data</button>
+
 
         <!-- New line with filtering controls pinned to left -->
         <div style="width: 100%; display: flex; gap: 1rem; flex-wrap: wrap;">
@@ -164,7 +215,6 @@
         <label for="wkt-input">Polygon WKT (Edit here or on map):</label>
         <textarea id="wkt-input" oninput="updateMapFromText()" placeholder="WKT Polygon will appear here..."></textarea>
         <div id="status">Ready</div>
-        <button onclick="updateMapFromText()" style="align-self: flex-end; width: auto;">Update Map from Text</button>
     </div>
 
     <!-- Leaflet JS -->
@@ -273,6 +323,100 @@
             }
         }
 
+        async function searchByGemini() {
+            const dateInput = document.getElementById('date-input').value;
+            const geminiKey = document.getElementById('gemini-key').value;
+            const geminiPrompt = document.getElementById('gemini-prompt').value;
+            const statusDiv = document.getElementById('status');
+
+            if (!dateInput) {
+                alert('Please select a date first');
+                return;
+            }
+
+            if (!geminiKey) {
+                alert('Please enter your Gemini API key');
+                return;
+            }
+
+            statusDiv.textContent = 'Searching with Gemini...';
+
+            try {
+                const response = await fetch('/search_gemini', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: dateInput, api_key: geminiKey, prompt: geminiPrompt })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Gemini search failed');
+                }
+
+                const dateKey = dateInput.replace(/-/g, '');
+                let eventsFound = 0;
+
+                // Handle new nested structure: { "YYYYMMDD": { "Country": { "Event": ["WKT"] } } }
+                if (result[dateKey]) {
+                    if (!globalData[dateKey]) globalData[dateKey] = {};
+
+                    const countries = result[dateKey];
+                    for (const country in countries) {
+                        if (!globalData[dateKey][country]) globalData[dateKey][country] = {};
+
+                        const events = countries[country];
+                        for (const eventName in events) {
+                            if (!globalData[dateKey][country][eventName]) globalData[dateKey][country][eventName] = [];
+
+                            const polygons = events[eventName];
+                            if (Array.isArray(polygons)) {
+                                polygons.forEach(p => {
+                                    if (!globalData[dateKey][country][eventName].includes(p)) {
+                                        globalData[dateKey][country][eventName].push(p);
+                                        eventsFound++;
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    statusDiv.textContent = `Found ${eventsFound} events via Gemini (Advanced)`;
+                }
+                // Fallback for legacy flat array structure
+                else {
+                    const events = result.events || [];
+                    if (events.length === 0) {
+                        statusDiv.textContent = 'No events found by Gemini';
+                        return;
+                    }
+
+                    if (!globalData[dateKey]) globalData[dateKey] = {};
+
+                    events.forEach(event => {
+                        const country = event.country;
+                        const eventName = event.event;
+                        const polygon = event.polygon;
+
+                        if (!globalData[dateKey][country]) globalData[dateKey][country] = {};
+                        if (!globalData[dateKey][country][eventName]) globalData[dateKey][country][eventName] = [];
+
+                        if (!globalData[dateKey][country][eventName].includes(polygon)) {
+                            globalData[dateKey][country][eventName].push(polygon);
+                            eventsFound++;
+                        }
+                    });
+
+                    statusDiv.textContent = `Found ${eventsFound} events via Gemini`;
+                }
+
+                populateCountries(dateKey);
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.textContent = 'Gemini error: ' + error.message;
+            }
+        }
+
         function populateCountries(dateKey) {
             const countrySelect = document.getElementById('country-select');
             // globalData structure: { "YYYYMMDD": { "Country": { "EventName": ["WKT"] } } }
@@ -290,6 +434,9 @@
             }
 
             const countries = Object.keys(dateData).sort();
+
+            // Clear existing options
+            countrySelect.innerHTML = '<option value="">All Countries</option>';
 
             countries.forEach(country => {
                 const option = document.createElement('option');
@@ -591,6 +738,13 @@
 
         // Init
         initMap();
+
+        // Set default date to today
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        document.getElementById('date-input').value = `${yyyy}-${mm}-${dd}`;
     </script>
 </body>
 
