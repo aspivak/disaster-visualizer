@@ -1,81 +1,64 @@
 # Disaster Event Visualizer
 
-A web application for visualizing disaster events and weather warnings on an interactive map.
+A serverless, pure frontend web application for visualizing disaster events and weather warnings on an interactive map.
+
+## Overview
+
+This application helps intelligence analysts and researchers visualize global crisis events by aggregating data from multiple sources and displaying them on an interactive map. It runs entirely in the browser using JavaScript.
 
 ## Features
 
-- 🗺️ Interactive map with location search
-- 🌍 Real-time disaster data from EONET, GDACS, and MeteoAlarm
-- 📍 Filter by country and event type
-- ✏️ Edit and view polygons in WKT format
-- 📅 Date-based event filtering
+- **🌍 Real-time Data**: Fetches events from NASA EONET and GDACS.
+- **✨ AI Analysis**: Integrated Gemini API for analyzing global news for crisis events with strict temporal logic.
+- **📍 Interactive Map**: Full-screen Leaflet map with geocoding search.
+- **📂 Client-Side Architecture**: No backend server required – runs directly in the browser.
+- **🎨 Modern UI**: Glass-morphism sidebar layout with intuitive controls.
+- **🏷️ Event Classification**: 自動 Automatically groups events into categories like "Earthquake", "Fire", "Conflict", etc.
+- **🧱 WKT Support**: View and edit Polygon WKT (Well-Known Text) directly.
 
-## Data Sources
-
-- **NASA EONET**: Natural disaster events
-- **GDACS**: Global Disaster Alert and Coordination System
-- **MeteoAlarm**: European weather warnings
-
-## Local Development
+## Usage
 
 ### Prerequisites
+- A modern web browser (Chrome, Firefox, Safari, Edge).
+- (Optional) A Google Gemini API Key for AI analysis features.
 
-- Python 3.11+
-- pip
+### Running the App
+Since the application uses a pure frontend architecture, you can run it by simply opening the file:
 
-### Setup
+1. Locate `index.html` in the project folder.
+2. Double-click to open it in your browser.
 
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+*Note: For external API calls to work from a `file://` protocol, the application automatically uses a CORS proxy.*
 
-3. Run the application:
-   ```bash
-   python app.py
-   ```
-
-4. Open browser to `http://localhost:5000`
-
-### Usage
-
-1. Enter a date or use location search
-2. Click "Fetch Data" to load disaster events
-3. Select country and event type to view polygons
-4. Edit polygons directly on the map or in the WKT field
-
-## Deployment
-
-### Deploy to Render
-
-1. Push code to GitHub
-2. Create account on [Render](https://render.com)
-3. Create new Web Service
-4. Connect your repository
-5. Render will auto-detect `render.yaml` and deploy
-
-### Manual Deployment
-
-Set environment variable:
-- `PORT`: Server port (default: 5000)
-
-Build command:
-```bash
-pip install -r requirements.txt
-```
-
-Start command:
-```bash
-python app.py
-```
+### How to Use
+1. **Target Date**: Select a date to investigate.
+2. **Fetch Data**: Click "Fetch Live Data" to load events from EONET and GDACS.
+3. **AI Analysis**: 
+   - Open "Gemini Configuration".
+   - Enter your API Key.
+   - Click "Analysis with Gemini" to scan for high-impact events reported in the news.
+4. **Filter & Explore**: 
+   - Use the **Country** dropdown to select a region.
+   - Use the **Event Type** dropdown to view specific categories (e.g., "Fire", "Flood").
+   - Read the **Description** (auto-expands for long text).
+   - View the event coverage polygon on the map.
 
 ## Tech Stack
 
-- **Backend**: Flask (Python)
-- **Frontend**: HTML, CSS, JavaScript
-- **Map**: Leaflet.js
-- **Geocoding**: Nominatim (OpenStreetMap)
+- **Core**: HTML5, CSS3, JavaScript (ES6+)
+- **Map**: Leaflet.js, Leaflet Draw
+- **Geometry**: Wicket (for WKT parsing)
+- **APIs**: 
+  - NASA EONET (Natural Events)
+  - GDACS (Disaster Alerts)
+  - Gemini API (AI Analysis)
+  - Nominatim (Geocoding)
+
+## Project Structure
+
+- `index.html` - Main application entry point and UI.
+- `disaster-api.js` - Core logic for API fetching, data parsing, and geometry handling.
+- `assets/` - Images and other static resources.
 
 ## License
 
