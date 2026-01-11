@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disaster AI</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <!-- Leaflet Draw CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --sidebar-width: 320px;
+            --primary-color: #007bff;
+            --primary-hover: #0069d9;
+            --bg-glass: rgba(255, 255, 255, 0.95);
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            --radius: 12px;
+            --font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+        }
+
+        /* Map Container (Full Screen Background) */
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Sidebar Container */
+        .sidebar {
+            position: relative;
+            z-index: 1000;
+            width: var(--sidebar-width);
+            height: calc(100vh - 40px);
+            margin: 20px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 20px;
+            box-sizing: border-box;
+            gap: 24px;
+        }
+
+        /* Header */
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 5px;
+        }
+
+        .header-title svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Sections */
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .section-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Inputs & Controls */
+        .input-group {
+            position: relative;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        input[type="password"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: var(--font-family);
+            font-size: 0.9rem;
+            background: #fff;
+            box-sizing: border-box;
+            transition: all 0.2s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+
+        /* Primary Button */
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-primary:disabled {
+            background-color: #a0c4ff;
+            cursor: not-allowed;
+        }
+
+        /* Secondary/Glass Button */
+        .btn-glass {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .btn-glass:hover {
+            border-color: #ccc;
+            background: #f8f9fa;
+        }
+
+        /* Search Input Wrapper */
+        .search-wrapper {
+            position: relative;
+        }
+
+        .search-wrapper input {
+            padding-right: 36px;
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6c757d;
+            cursor: pointer;
+        }
+
+        /* Accordion for Gemini */
+        .accordion-content {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 5px;
+        }
+
+        .accordion-content.show {
+            display: flex;
+        }
+
+        /* Bottom Floating Panel (WKT) */
+        .bottom-panel {
+            position: absolute;
+            bottom: 24px;
+            left: calc(var(--sidebar-width) + 40px);
+            right: 24px;
+            /* Or max-width */
+            max-width: 600px;
+            z-index: 1000;
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            padding: 16px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .bottom-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .wkt-textarea {
+            font-family: monospace;
+            font-size: 0.85rem;
+            min-height: 60px;
+            resize: vertical;
+            background: #f1f3f5;
+        }
+
+        #event-description {
+            min-height: 38px;
+            overflow-y: hidden;
+            resize: none;
+            line-height: 1.4;
+        }
+
+        /* Status Indicator */
+        .status-badge {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            background: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #28a745;
+            border-radius: 50%;
+        }
+
+        /* Scrollbar styling */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: #ccc;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Map Background -->
+    <div id="map"></div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <!-- Header -->
+        <div class="header-title">
+            <span>🌍 Disaster AI</span>
+        </div>
+
+        <!-- Date & Fetch -->
+        <div class="section">
+            <label class="section-label" for="date-input">Target Date</label>
+            <input type="date" id="date-input">
+            <button id="fetch-btn" class="btn-primary" onclick="fetchData()">
+                Fetch Live Data
+            </button>
+        </div>
+
+        <!-- Navigation -->
+        <div class="section">
+            <div class="section-label">Navigation</div>
+            <div class="search-wrapper">
+                <input type="text" id="location-search" placeholder="Search city or region...">
+                <div class="search-icon" onclick="searchLocation()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Intelligence -->
+        <div class="section">
+            <div class="section-label">AI Intelligence</div>
+
+            <button class="btn-glass" onclick="toggleAccordion('gemini-config')">
+                <span>Gemini Configuration</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </button>
+            <div id="gemini-config" class="accordion-content">
+                <input type="password" id="gemini-key" placeholder="Enter Gemini API Key">
+                <textarea id="gemini-prompt" rows="3" placeholder="Custom system prompt...">You are a **Global Crisis Intelligence Analyst**. Your task is to scan world news media to identify **ONLY** currently active, high-impact crisis events for the specific date: **{date}**.
+
+**1. STRICT TEMPORAL LOGIC (CRITICAL):**
+* **Reference Date:** {date}
+* **The 48-Hour Rule:** Only report events that **started** or **significantly escalated** within 48 hours of {date}.
+* **Outdated Event Removal:** If an event happened 3+ days ago and is merely being "discussed" or "analyzed" today, **IGNORE IT**.
+* **Ongoing Conflict Rule:** For long-standing wars (e.g., Ukraine, Gaza, Sudan), **DO NOT** report "fighting continues" or general updates. **ONLY** report them if a **specific, discrete, high-casualty incident** occurred on {date} (e.g., "Missile strike on market kills 50", "Dam collapse").
+
+**2. Definition of "Crisis Event" (Search Criteria):**
+You are looking for **acute, unfolding events** that pose an immediate threat to life, safety, or stability.
+* **✅ Include:**
+    * **Natural Disasters:** Earthquakes (>6.0), Tsunami warnings, Major Hurricanes/Typhoons (landfall or imminent), Volcanic eruptions.
+    * **Geopolitical Conflict:** *New* outbreaks of war, *specific* major escalations (see "Ongoing Conflict Rule" above), coups d'état, terrorist attacks with mass casualties.
+    * **Humanitarian:** *Sudden* massive refugee displacements (10k+ in 24h), new famine declarations.
+    * **Health:** *New* WHO outbreak declarations (e.g., Ebola, Pandemic alerts).
+    * **Major Accidents:** Plane crashes, nuclear incidents, massive infrastructure collapse.
+* **❌ Exclude:**
+    * Events that concluded before {date}.
+    * Op-eds, political opinions, or minor legislative disputes.
+    * Localized crime reports (unless related to national-scale unrest).
+    * Stock market fluctuations (unless it is a total market crash).
+
+**3. Search Instructions:**
+* **Sources:** Prioritize Tier-1 Global News Agencies (e.g., Reuters, AP, BBC, Al Jazeera, CNN, AFP).
+* **Verification:** An event must be reported by **at least two independent** major sources to be included.
+* **Sanity Check:** Before adding an event, ask yourself: "Did this specific incident happen on {date} or the day before?" If no, discard.
+
+**4. Output Format:**
+Return the results in the following JSON-like structure. If coordinates are not explicit in the news, build a POLYGON using approximate area coordinates.
+
+{{
+    "{date_compact}": {{
+        "Country Name": {{
+            "Specific Event Title (MUST include time/status)": [
+                "POLYGON ((...))"
+            ]
+        }}
+    }}
+}}</textarea>
+            </div>
+
+            <button class="btn-glass" style="justify-content: center; color: #007bff;" onclick="searchByGemini()">
+                ✨ Analysis with Gemini
+            </button>
+        </div>
+
+        <!-- Filters & Details -->
+        <div class="section">
+            <div class="section-label">Filters & Details</div>
+
+            <div class="input-group">
+                <label style="font-size: 0.8rem; color: #666; margin-bottom: 4px; display: block;">Country</label>
+                <select id="country-select" onchange="filterEvents()">
+                    <option value="">All Countries</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label style="font-size: 0.8rem; color: #666; margin-bottom: 4px; display: block;">Event Type</label>
+                <select id="type-select" onchange="onEventTypeSelect()">
+                    <option value="">All Types</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label style="font-size: 0.8rem; color: #666; margin-bottom: 4px; display: block;">Description</label>
+                <textarea id="event-description" readonly placeholder="Select event type to see details..." rows="1"
+                    style="height: auto;"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Floating Panel (WKT) -->
+    <div class="bottom-panel">
+        <div class="bottom-panel-header">
+            <span>Polygon WKT <span style="font-weight: 400; color: #666; font-size: 0.8em;">Live Edit</span></span>
+        </div>
+        <textarea id="wkt-input" class="wkt-textarea" oninput="updateMapFromText()"
+            placeholder="WKT Polygon will appear here..."></textarea>
+    </div>
+
+    <!-- Status Indicator -->
+    <div class="status-badge">
+        <div class="status-dot"></div>
+        <span id="status">System Ready</span>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <!-- Leaflet Draw JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <!-- Wicket (WKT Parser) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/wicket/1.3.8/wicket.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/wicket/1.3.8/wicket-leaflet.min.js"></script>
+    <!-- Disaster API (migrated from Python backend) -->
+    <script src="disaster-api.js"></script>
+
+    <script>
+        let globalData = {};
+        let eventTypeMapping = {}; // Maps short type -> list of full event names
+        let map;
+        let drawnItems;
+        let drawControl;
+
+        // Auto-resize description field
+        function autoResizeDescription() {
+            const el = document.getElementById('event-description');
+            el.style.height = 'auto';
+            el.style.height = (el.scrollHeight) + 'px';
+        }
+
+        // Toggle Accordion
+        function toggleAccordion(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('show');
+        }
+
+        // Initialize Map
+        function initMap() {
+            // Adjust map view to account for sidebar (shift center right)
+            map = L.map('map', { zoomControl: false }).setView([20, 20], 2);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            // Add Zoom Control to top right
+            L.control.zoom({
+                position: 'topright'
+            }).addTo(map);
+
+            // FeatureGroup is to store editable layers
+            drawnItems = new L.FeatureGroup();
+            map.addLayer(drawnItems);
+
+            // Draw Control
+            drawControl = new L.Control.Draw({
+                position: 'topright',
+                edit: {
+                    featureGroup: drawnItems
+                },
+                draw: {
+                    polygon: true,
+                    polyline: false,
+                    rectangle: true,
+                    circle: false,
+                    marker: false,
+                    circlemarker: false
+                }
+            });
+            map.addControl(drawControl);
+
+            // Event Listeners for Draw/Edit
+            map.on(L.Draw.Event.CREATED, function (e) {
+                drawnItems.clearLayers(); // Only one polygon at a time for this simplified version
+                const layer = e.layer;
+                drawnItems.addLayer(layer);
+                updateTextFromMap();
+            });
+
+            map.on(L.Draw.Event.EDITED, function (e) {
+                updateTextFromMap();
+            });
+
+            map.on(L.Draw.Event.DELETED, function (e) {
+                updateTextFromMap();
+            });
+        }
+
+        async function fetchData() {
+            const dateInput = document.getElementById('date-input').value;
+            const statusDiv = document.getElementById('status');
+            const countrySelect = document.getElementById('country-select');
+            const typeSelect = document.getElementById('type-select');
+
+            if (!dateInput) {
+                alert("Please enter a date.");
+                return;
+            }
+
+            const dateKey = dateInput.replace(/-/g, '');
+            statusDiv.textContent = "Fetching data...";
+            document.getElementById('fetch-btn').disabled = true;
+            document.getElementById('fetch-btn').innerText = "Fetching...";
+
+            countrySelect.innerHTML = '<option value="">All Countries</option>';
+            typeSelect.innerHTML = '<option value="">All Types</option>';
+            drawnItems.clearLayers();
+            document.getElementById('wkt-input').value = "";
+
+            try {
+                // Use client-side API to fetch from EONET and GDACS
+                const results = await DisasterAPI.fetchAllDisasterData(dateKey, {
+                    includeMeteoAlarm: false // MeteoAlarm requires CORS proxy
+                });
+
+                // Merge into globalData
+                for (const date in results) {
+                    if (!globalData[date]) globalData[date] = {};
+                    for (const country in results[date]) {
+                        if (!globalData[date][country]) globalData[date][country] = {};
+                        for (const event in results[date][country]) {
+                            if (!globalData[date][country][event]) globalData[date][country][event] = [];
+                            results[date][country][event].forEach(p => {
+                                if (!globalData[date][country][event].includes(p)) {
+                                    globalData[date][country][event].push(p);
+                                }
+                            });
+                        }
+                    }
+                }
+
+                populateCountries(dateKey);
+                const eventCount = Object.values(results[dateKey] || {}).reduce(
+                    (sum, c) => sum + Object.keys(c).length, 0
+                );
+                statusDiv.textContent = `Data loaded. ${eventCount} events.`;
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.textContent = "Error: " + error.message;
+            } finally {
+                document.getElementById('fetch-btn').disabled = false;
+                document.getElementById('fetch-btn').innerText = "Fetch Live Data";
+            }
+        }
+
+        async function searchByGemini() {
+            const dateInput = document.getElementById('date-input').value;
+            const geminiKey = document.getElementById('gemini-key').value;
+            const geminiPrompt = document.getElementById('gemini-prompt').value;
+            const statusDiv = document.getElementById('status');
+
+            if (!dateInput) {
+                alert('Please select a date first');
+                return;
+            }
+
+            if (!geminiKey) {
+                alert('Please enter your Gemini API key inside Configuration');
+                toggleAccordion('gemini-config');
+                document.getElementById('gemini-key').focus();
+                return;
+            }
+
+            statusDiv.textContent = 'Searching with Gemini...';
+
+            try {
+                // Use client-side Gemini API call
+                const result = await DisasterAPI.searchGemini(dateInput, geminiKey, geminiPrompt);
+
+                const dateKey = dateInput.replace(/-/g, '');
+                let eventsFound = 0;
+
+                // Handle new nested structure: { "YYYYMMDD": { "Country": { "Event": ["WKT"] } } }
+                if (result[dateKey]) {
+                    if (!globalData[dateKey]) globalData[dateKey] = {};
+
+                    const countries = result[dateKey];
+                    for (const country in countries) {
+                        if (!globalData[dateKey][country]) globalData[dateKey][country] = {};
+
+                        const events = countries[country];
+                        for (const eventName in events) {
+                            if (!globalData[dateKey][country][eventName]) globalData[dateKey][country][eventName] = [];
+
+                            const polygons = events[eventName];
+                            if (Array.isArray(polygons)) {
+                                polygons.forEach(p => {
+                                    if (!globalData[dateKey][country][eventName].includes(p)) {
+                                        globalData[dateKey][country][eventName].push(p);
+                                        eventsFound++;
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    statusDiv.textContent = `Found ${eventsFound} events via Gemini`;
+                }
+                // Fallback for legacy flat array structure
+                else {
+                    const events = result.events || [];
+                    if (events.length === 0) {
+                        statusDiv.textContent = 'No events found by Gemini';
+                        return;
+                    }
+
+                    if (!globalData[dateKey]) globalData[dateKey] = {};
+
+                    events.forEach(event => {
+                        const country = event.country;
+                        const eventName = event.event;
+                        const polygon = event.polygon;
+
+                        if (!globalData[dateKey][country]) globalData[dateKey][country] = {};
+                        if (!globalData[dateKey][country][eventName]) globalData[dateKey][country][eventName] = [];
+
+                        if (!globalData[dateKey][country][eventName].includes(polygon)) {
+                            globalData[dateKey][country][eventName].push(polygon);
+                            eventsFound++;
+                        }
+                    });
+
+                    statusDiv.textContent = `Found ${eventsFound} events via Gemini`;
+                }
+
+                populateCountries(dateKey);
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.textContent = 'Gemini error: ' + error.message;
+            }
+        }
+
+        function populateCountries(dateKey) {
+            const countrySelect = document.getElementById('country-select');
+            // globalData structure: { "YYYYMMDD": { "Country": { "EventName": ["WKT"] } } }
+            // Some robustness if dateKey mismatch
+            let dateData = globalData[dateKey];
+            if (!dateData) {
+                // Try finding any key
+                const keys = Object.keys(globalData);
+                if (keys.length > 0) dateData = globalData[keys[0]];
+            }
+
+            if (!dateData) {
+                // document.getElementById('status').textContent = "No data found.";
+                return;
+            }
+
+            const countries = Object.keys(dateData).sort();
+
+            // Clear existing options
+            countrySelect.innerHTML = '<option value="">All Countries</option>';
+
+            countries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country;
+                option.textContent = country;
+                countrySelect.appendChild(option);
+            });
+        }
+
+        // Predefined event type categories with keyword patterns
+        const EVENT_TYPE_CATEGORIES = {
+            'Cyclone': ['cyclone', 'cyclonic'],
+            'Earthquake': ['earthquake', 'seismic', 'quake', 'tremor', 'aftershock'],
+            'Fire': ['fire', 'wildfire', 'forest fire', 'bushfire', 'blaze', 'burning'],
+            'Flood': ['flood', 'flooding', 'flash flood', 'inundation', 'deluge'],
+            'Hurricane': ['hurricane'],
+            'Landslide': ['landslide', 'landslip', 'rockslide', 'rockfall'],
+            'Mudslide': ['mudslide', 'mudflow', 'debris flow', 'lahar'],
+            'Tsunami': ['tsunami', 'tidal wave'],
+            'Tropical Storm': ['tropical storm', 'tropical depression', 'tropical disturbance'],
+            'Typhoon': ['typhoon'],
+            'Volcanic Eruption': ['volcano', 'volcanic', 'eruption', 'lava', 'pyroclastic', 'ash cloud'],
+            'Winter Storm': ['winter storm', 'blizzard', 'snowstorm', 'ice storm', 'freezing', 'frost', 'cold wave', 'polar vortex', 'heavy snow', 'snow'],
+            'War': ['war', 'conflict', 'military', 'armed', 'invasion', 'airstrike', 'bombing', 'combat', 'battle', 'attack', 'missile'],
+            'Storm': ['storm', 'thunderstorm', 'severe storm', 'hail', 'gale', 'wind', 'lightning', 'squall', 'tempest', 'rain', 'heavy rain'],
+            'Building Collapse': ['building collapse', 'structure collapse', 'collapse', 'structural failure'],
+            'Train Derailment': ['train derailment', 'derailment', 'rail accident', 'train crash', 'railway accident'],
+            'Manmade Crisis': ['explosion', 'industrial accident', 'chemical spill', 'oil spill', 'nuclear', 'radiation', 'toxic', 'gas leak', 'pipeline', 'mining accident', 'dam failure', 'dam break', 'plane crash', 'aircraft', 'ship', 'maritime', 'refugee', 'humanitarian', 'famine', 'epidemic', 'outbreak']
+        };
+
+        // Helper: Classify event into predefined category
+        function classifyEventType(fullEventName) {
+            const lowerName = fullEventName.toLowerCase();
+
+            // Check each category in priority order
+            const priorityOrder = [
+                'Hurricane', 'Typhoon', 'Tropical Storm', 'Cyclone', 'Winter Storm',
+                'Tsunami', 'Earthquake', 'Volcanic Eruption', 'Mudslide', 'Landslide',
+                'Flood', 'Fire', 'Building Collapse', 'Train Derailment', 'War',
+                'Storm', 'Manmade Crisis'
+            ];
+
+            for (const category of priorityOrder) {
+                const keywords = EVENT_TYPE_CATEGORIES[category];
+                for (const keyword of keywords) {
+                    if (lowerName.includes(keyword)) {
+                        return category;
+                    }
+                }
+            }
+
+            return 'Unclassified';
+        }
+
+        // Legacy helper
+        function extractEventType(fullEventName) {
+            return classifyEventType(fullEventName);
+        }
+
+        function filterEvents() {
+            const countrySelect = document.getElementById('country-select');
+            const typeSelect = document.getElementById('type-select');
+            const selectedCountry = countrySelect.value;
+
+            // Clear events and description
+            typeSelect.innerHTML = '<option value="">All Types</option>';
+            document.getElementById('event-description').value = '';
+            eventTypeMapping = {};
+
+            // Find data for selected country
+            let events = null;
+            for (const date in globalData) {
+                if (globalData[date][selectedCountry]) {
+                    events = globalData[date][selectedCountry];
+                    break;
+                }
+            }
+
+            if (!events) return;
+
+            const eventNames = Object.keys(events);
+            const eventTypes = new Set();
+
+            // Extract short types and build mapping
+            eventNames.forEach(fullName => {
+                const shortType = extractEventType(fullName);
+                eventTypes.add(shortType);
+
+                if (!eventTypeMapping[shortType]) {
+                    eventTypeMapping[shortType] = [];
+                }
+                eventTypeMapping[shortType].push(fullName);
+            });
+
+            // Populate dropdown
+            Array.from(eventTypes).sort().forEach(eventType => {
+                const option = document.createElement('option');
+                option.value = eventType;
+                option.textContent = eventType;
+                typeSelect.appendChild(option);
+            });
+        }
+
+        function onEventTypeSelect() {
+            const countrySelect = document.getElementById('country-select');
+            const typeSelect = document.getElementById('type-select');
+            const descriptionField = document.getElementById('event-description');
+            const selectedCountry = countrySelect.value;
+            const selectedType = typeSelect.value;
+
+            if (!selectedCountry || !selectedType) {
+                descriptionField.value = '';
+                return;
+            }
+
+            // Get first full event name for this type
+            const fullEventNames = eventTypeMapping[selectedType];
+            if (!fullEventNames || fullEventNames.length === 0) return;
+
+            const fullEventName = fullEventNames[0]; // Use first match
+
+            // Update description field
+            descriptionField.value = fullEventNames.length === 1 ? fullEventName : `${fullEventNames.length} events (first: ${fullEventName})`;
+            autoResizeDescription();
+
+            // Find and display polygons
+            let allPolygons = [];
+            for (const date in globalData) {
+                if (globalData[date][selectedCountry]) {
+                    fullEventNames.forEach(name => {
+                        const wktList = globalData[date][selectedCountry][name];
+                        if (wktList) allPolygons.push(...wktList);
+                    });
+                }
+            }
+
+            drawnItems.clearLayers();
+            if (allPolygons.length > 0) {
+                // Show all polygons on map
+                allPolygons.forEach(wkt => {
+                    try {
+                        const wktObj = new Wkt.Wkt();
+                        wktObj.read(wkt);
+                        const obj = wktObj.toObject();
+                        // Style based on type
+                        if (obj.setStyle) {
+                            let color = '#3388ff';
+                            if (selectedType === 'Fire') color = '#e74c3c';
+                            if (selectedType === 'Flood') color = '#3498db';
+                            if (selectedType === 'Earthquake') color = '#f39c12';
+
+                            obj.setStyle({ color: color, fillColor: color });
+                        }
+                        drawnItems.addLayer(obj);
+                    } catch (e) { }
+                });
+
+                document.getElementById('wkt-input').value = allPolygons[0]; // Show first WKT
+
+                if (drawnItems.getBounds().isValid()) {
+                    map.fitBounds(drawnItems.getBounds());
+                }
+            }
+        }
+
+        function updateMapFromText() {
+            const wkt = document.getElementById('wkt-input').value;
+            if (!wkt) return;
+
+            drawnItems.clearLayers();
+
+            try {
+                // Use Wicket to parse WKT
+                const wktObj = new Wkt.Wkt();
+                wktObj.read(wkt);
+
+                const obj = wktObj.toObject();
+
+                if (Array.isArray(obj)) {
+                    obj.forEach(l => drawnItems.addLayer(l));
+                } else {
+                    drawnItems.addLayer(obj);
+                }
+
+                // Zoom to fit
+                if (drawnItems.getBounds().isValid()) {
+                    map.fitBounds(drawnItems.getBounds());
+                }
+
+                document.getElementById('status').textContent = "Map updated from text.";
+            } catch (e) {
+                document.getElementById('status').textContent = "Invalid WKT (typing...)";
+            }
+        }
+
+        function updateTextFromMap() {
+            const layers = drawnItems.getLayers();
+            if (layers.length === 0) {
+                document.getElementById('wkt-input').value = "";
+                return;
+            }
+
+            try {
+                const layer = layers[0];
+                const wktObj = new Wkt.Wkt();
+                wktObj.fromObject(layer);
+                const wkt = wktObj.write();
+
+                document.getElementById('wkt-input').value = wkt;
+                document.getElementById('status').textContent = "WKT updated from map.";
+            } catch (e) {
+                console.error(e);
+                document.getElementById('status').textContent = "Error converting map to WKT.";
+            }
+        }
+
+        // Location Search
+        async function searchLocation() {
+            const searchInput = document.getElementById('location-search');
+            const query = searchInput.value.trim();
+            const statusDiv = document.getElementById('status');
+
+            if (!query) {
+                alert('Please enter a location to search.');
+                return;
+            }
+
+            statusDiv.textContent = 'Searching location...';
+
+            try {
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+                    { headers: { 'User-Agent': 'DisasterEventVisualizer/1.0' } }
+                );
+
+                const results = await response.json();
+
+                if (results.length === 0) {
+                    statusDiv.textContent = 'Location not found.';
+                    return;
+                }
+
+                const location = results[0];
+                const lat = parseFloat(location.lat);
+                const lon = parseFloat(location.lon);
+
+                let zoom = 10;
+                const type = location.type;
+                if (type === 'country') zoom = 5;
+
+                map.setView([lat, lon], zoom);
+                statusDiv.textContent = `Found: ${location.display_name}`;
+            } catch (error) {
+                console.error('Search error:', error);
+                statusDiv.textContent = 'Error searching location.';
+            }
+        }
+
+        // Allow Enter key to trigger search
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('location-search').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    searchLocation();
+                }
+            });
+
+            // Set default date
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('date-input').value = `${yyyy}-${mm}-${dd}`;
+
+            // Init Map (after DOM load)
+            initMap();
+        });
+    </script>
+</body>
+
+</html>
