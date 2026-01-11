@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: disaster-event-visualizer
+    env: static
+    buildCommand: echo "No build required"
+    staticPublishPath: .
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache

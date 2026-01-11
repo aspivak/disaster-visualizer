@@ -60,6 +60,14 @@ Since the application uses a pure frontend architecture, you can run it by simpl
 - `disaster-api.js` - Core logic for API fetching, data parsing, and geometry handling.
 - `assets/` - Images and other static resources.
 
+## Deployment
+
+### Render (Static Site)
+This project is configured for deployment on [Render](https://render.com) as a Static Site.
+1. Push code to GitHub.
+2. Link repository in Render.
+3. Render will auto-detect `render.yaml` and deploy.
+
 ## License
 
 MIT
